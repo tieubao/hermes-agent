@@ -169,7 +169,9 @@ def _resolve_path(filepath: str, task_id: str = "default") -> Path | PurePosixPa
 # (gateway/run.py); the file/terminal-tool layer must do likewise so CLI
 # sessions get the same protection. See references/worktree-cwd-discipline.md.
 _TERMINAL_CWD_SENTINELS = frozenset({"", ".", "./", "auto", "cwd"})
-_CONTAINER_PATH_BACKENDS_FALLBACK = frozenset({"docker", "singularity", "modal", "daytona", "vercel_sandbox"})
+_CONTAINER_PATH_BACKENDS_FALLBACK = frozenset(
+    {"docker", "singularity", "modal", "daytona", "vercel_sandbox", "apple_container"}
+)
 
 
 def _terminal_env_type_for_task(task_id: str = "default") -> str:
@@ -1489,6 +1491,11 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
                 image = overrides.get("modal_image") or config["modal_image"]
             elif env_type == "daytona":
                 image = overrides.get("daytona_image") or config["daytona_image"]
+            elif env_type == "apple_container":
+                image = (
+                    overrides.get("apple_container_image")
+                    or config["apple_container_image"]
+                )
             else:
                 image = ""
 
@@ -1524,18 +1531,13 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
             from tools.terminal_tool import _is_container_backend as _is_container
 
             if _is_container(env_type):
-                container_config = {
-                    "container_cpu": config.get("container_cpu", 1),
-                    "container_memory": config.get("container_memory", 5120),
-                    "container_disk": config.get("container_disk", 51200),
-                    "container_persistent": config.get("container_persistent", True),
-                    "vercel_runtime": config.get("vercel_runtime", ""),
-                    "docker_volumes": config.get("docker_volumes", []),
-                    "docker_mount_cwd_to_workspace": config.get("docker_mount_cwd_to_workspace", False),
-                    "docker_forward_env": config.get("docker_forward_env", []),
-                    "docker_run_as_host_user": config.get("docker_run_as_host_user", False),
-                    "docker_network": config.get("docker_network", True),
-                }
+                # Shared helper, NOT an inline dict: an inline copy that misses
+                # a key silently drops that flag on this spawn path only. This
+                # exact shape dropped apple_container_extra_args (the
+                # --network none carrier) here while the terminal path had it.
+                from tools.terminal_tool import _container_config_from_config
+
+                container_config = _container_config_from_config(config)
 
             ssh_config = None
             if env_type == "ssh":

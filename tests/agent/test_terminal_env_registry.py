@@ -58,7 +58,9 @@ def test_register_and_get():
     reg.register_provider(p)
     assert reg.get_provider("testbox") is p
     assert reg.get_provider("TESTBOX") is p  # case-insensitive lookup
-    assert reg.plugin_backend_names() == ["testbox"]
+    # apple_container registers itself as an in-tree provider, so the list is
+    # not exclusively the test double.
+    assert "testbox" in reg.plugin_backend_names()
 
 
 def test_rejects_non_provider():

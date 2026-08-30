@@ -7,6 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
+
+def test_remote_skill_backends_include_apple_container():
+    """apple_container declares is_remote on its provider rather than sitting
+    in the built-in frozenset, so assert the classification, not the set."""
+    import tools.skills_tool as skills_tool
+
+    assert skills_tool._is_remote_env_backend("apple_container") is True
+
 import tools.skills_tool as skills_tool_module
 from tools.skills_tool import (
     _get_required_environment_variables,

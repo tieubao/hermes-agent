@@ -15,6 +15,7 @@ import importlib.util
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import sys
@@ -1400,7 +1401,6 @@ def setup_tts(config: dict):
 
 def setup_terminal_backend(config: dict):
     """Configure the terminal execution backend."""
-    import platform as _platform
     print_header("Terminal Backend")
     print_info("Choose where Hermes runs shell commands and code.")
     print_info("This affects tool execution, file access, and isolation.")
@@ -1408,7 +1408,7 @@ def setup_terminal_backend(config: dict):
     print()
 
     current_backend = cfg_get(config, "terminal", "backend", default="local")
-    is_linux = _platform.system() == "Linux"
+    is_linux = platform.system() == "Linux"
 
     # Build backend choices with descriptions
     terminal_choices = [
@@ -1441,6 +1441,14 @@ def setup_terminal_backend(config: dict):
 
         for _provider in list_providers():
             _pname = _provider.name.strip().lower()
+            # A provider whose probe says "unavailable" cannot run on this
+            # host at all (as opposed to "needs_setup", which is fixable), so
+            # do not offer it. Apple Container on Linux is the live case.
+            try:
+                if _provider.probe()[0] == "unavailable":
+                    continue
+            except Exception:
+                pass
             terminal_choices.append(f"{_provider.display_name} - {_provider.description}")
             idx_to_backend[next_idx] = _pname
             backend_to_idx[_pname] = next_idx
@@ -1699,6 +1707,12 @@ def setup_terminal_backend(config: dict):
             for _line in _provider.setup_instructions():
                 print_info(_line)
             _provider.post_setup()
+            # Backend-specific terminal.* seeding the wizard has no generic
+            # prompt for (image, volumes, resource floor). Duck-typed: the
+            # upstream ABC has no such hook, so a provider without one is fine.
+            _apply = getattr(_provider, "apply_config_defaults", None)
+            if callable(_apply):
+                _apply(config["terminal"])
         except Exception as exc:
             print_warning(f"Backend plugin setup hook failed: {exc}")
 

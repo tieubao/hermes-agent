@@ -31,6 +31,7 @@ import logging
 import math
 import mimetypes
 import os
+import platform
 import queue
 import re
 import secrets
@@ -1294,7 +1295,10 @@ _SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
     "terminal.backend": {
         "type": "select",
         "description": "Terminal execution backend",
-        "options": ["local", "docker", "ssh", "modal", "daytona", "vercel_sandbox", "singularity"],
+        "options": [
+            "local", "docker", "ssh", "modal", "daytona",
+            "vercel_sandbox", "singularity",
+        ],
     },
     "terminal.vercel_runtime": {
         "type": "select",

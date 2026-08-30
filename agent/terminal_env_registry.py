@@ -48,6 +48,30 @@ _scoped_providers: Dict[str, Dict[str, TerminalEnvironmentProvider]] = {}
 _generation = 0
 _scoped_generations: Dict[str, int] = {}
 _lock = threading.Lock()
+_builtin_bootstrap_done = False
+
+
+def _ensure_builtin_providers() -> None:
+    """Register the in-tree providers that ride this registry.
+
+    ``apple_container`` is an in-tree backend that classifies through the
+    registry rather than through the hardcoded frozensets. Nothing imports
+    its module eagerly, and a bare ``run_agent`` process never runs plugin
+    discovery, so every read path bootstraps it here. Runs once; called
+    before the lock, never while holding it.
+    """
+    global _builtin_bootstrap_done
+    if _builtin_bootstrap_done:
+        return
+    _builtin_bootstrap_done = True
+    try:
+        from tools.environments.apple_container_provider import (
+            register_builtin_providers,
+        )
+
+        register_builtin_providers()
+    except Exception:
+        logger.debug("Built-in terminal provider bootstrap failed", exc_info=True)
 
 
 def register_provider(
@@ -99,6 +123,7 @@ def register_provider(
 
 def list_providers(*, scope: Optional[str] = None) -> List[TerminalEnvironmentProvider]:
     """Return all registered providers, sorted by name."""
+    _ensure_builtin_providers()
     with _lock:
         merged = dict(_providers)
         merged.update(_scoped_providers.get(scope or hermes_home_key(), {}))
@@ -112,6 +137,7 @@ def get_provider(
     """Return the provider registered under *name*, or None."""
     if not isinstance(name, str):
         return None
+    _ensure_builtin_providers()
     key = name.strip().lower()
     with _lock:
         return (
@@ -154,6 +180,7 @@ def plugin_strip_env_keys() -> frozenset:
     the static tier-1 set unconditionally).
     """
     keys: set = set()
+    _ensure_builtin_providers()
     with _lock:
         all_providers = list(_providers.values())
         for scoped in _scoped_providers.values():
@@ -213,7 +240,8 @@ def restore_registration(
 
 def _reset_for_tests() -> None:
     """Clear all registrations. Test hook — mirrors sibling registries."""
-    global _generation
+    global _generation, _builtin_bootstrap_done
+    _builtin_bootstrap_done = False
     with _lock:
         _providers.clear()
         _scoped_providers.clear()
