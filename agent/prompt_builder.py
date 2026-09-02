@@ -1212,7 +1212,7 @@ def _probe_remote_backend(env_type: str) -> str | None:
         elif env_type == "daytona":
             image = config.get("daytona_image", "")
         elif env_type == "apple_container":
-            image = config.get("apple_container_image", "python:3.11-slim-bookworm")
+            image = config.get("apple_container_image", "")
         else:
             image = ""
 
@@ -1237,9 +1237,7 @@ def _probe_remote_backend(env_type: str) -> str | None:
                 "container_persistent": config.get("container_persistent", True),
                 "modal_mode": config.get("modal_mode", "auto"),
                 "vercel_runtime": config.get("vercel_runtime", ""),
-                "apple_container_image": config.get(
-                    "apple_container_image", "python:3.11-slim-bookworm"
-                ),
+                "apple_container_image": config.get("apple_container_image", ""),
                 "apple_container_volumes": config.get(
                     "apple_container_volumes", []
                 ),

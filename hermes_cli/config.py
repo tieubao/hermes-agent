@@ -5051,7 +5051,7 @@ def show_config():
         print(f"  Vercel runtime: {terminal.get('vercel_runtime', 'node24')}")
         print(f"  Vercel auth:    {'configured' if get_env_value('VERCEL_OIDC_TOKEN') or (get_env_value('VERCEL_TOKEN') and get_env_value('VERCEL_PROJECT_ID') and get_env_value('VERCEL_TEAM_ID')) else '(not set)'}")
     elif terminal.get('backend') == 'apple_container':
-        print(f"  Apple image:  {terminal.get('apple_container_image', 'python:3.11-slim-bookworm')}")
+        print(f"  Apple image:  {terminal.get('apple_container_image', DEFAULT_CONFIG['terminal']['apple_container_image'])}")
         print(f"  Apple volumes: {len(terminal.get('apple_container_volumes', []))} configured")
         print(f"  Apple extra args: {terminal.get('apple_container_extra_args', [])}")
         print(f"  CPUs:         {terminal.get('container_cpu', 4)}")

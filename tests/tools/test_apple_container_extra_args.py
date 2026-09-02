@@ -66,6 +66,62 @@ def test_env_bridge_rejects_non_list(monkeypatch):
         terminal_tool._get_env_config()
 
 
+def test_extra_args_bind_mount_counts_as_host_access():
+    """A bind mount smuggled through extra_args must not skip approval guards.
+
+    ``_docker_has_host_access`` used to check only the structured
+    ``apple_container_volumes``/``docker_volumes`` lists, never
+    ``*_extra_args``. ``--mount type=bind,source=<host>,...`` reaches
+    ``container run``/``docker run`` exactly like a structured volume, so it
+    must flip ``has_host_access`` the same way.
+    """
+    from tools.terminal_tool import _docker_has_host_access
+
+    config = {
+        "env_type": "apple_container",
+        "apple_container_volumes": [],
+        "apple_container_extra_args": [
+            "--mount", "type=bind,source=/Users/x/secrets,target=/secrets",
+        ],
+    }
+    assert _docker_has_host_access(config) is True
+
+    docker_config = {
+        "env_type": "docker",
+        "docker_volumes": [],
+        "docker_extra_args": [
+            "--mount", "type=bind,source=/Users/x/secrets,target=/secrets",
+        ],
+    }
+    assert _docker_has_host_access(docker_config) is True
+
+
+def test_extra_args_network_only_does_not_count_as_host_access():
+    """Unchanged behavior: extra_args with no mount flag stays isolated."""
+    from tools.terminal_tool import _docker_has_host_access
+
+    config = {
+        "env_type": "apple_container",
+        "apple_container_volumes": [],
+        "apple_container_extra_args": ["--network", "none"],
+    }
+    assert _docker_has_host_access(config) is False
+
+
+def test_extra_args_bind_mount_warns_on_sensitive_source(recorder, caplog):
+    """A ``--mount`` in extra_args gets the same sensitive-path warning as a
+    structured volume (``_warn_sensitive_volumes`` used to scan only the
+    structured ``volumes`` list, never extra_args)."""
+    with caplog.at_level("WARNING", logger="tools.environments.apple_container"):
+        apple.AppleContainerEnvironment(
+            image="python:3.11-slim-bookworm",
+            extra_args=[
+                "--mount", "type=bind,source=/Users/x/.ssh,target=/secrets",
+            ],
+        )
+    assert any("sensitive host directory" in record.message for record in caplog.records)
+
+
 def test_prompt_probe_container_carries_extra_args(monkeypatch):
     """The prompt-backend-probe spawn path must pass extra_args too.
 

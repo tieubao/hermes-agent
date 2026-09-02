@@ -21,6 +21,11 @@ in-tree docker/modal/... implementations.
 
 Mirrors :mod:`agent.browser_registry` scope semantics: providers register
 into a per-profile scope (multiplexed gateways) or the global base map.
+
+Lock order: :func:`_ensure_builtin_providers` (guarded by ``_bootstrap_lock``)
+must always run BEFORE ``_lock`` is taken, never while holding it --
+``register_provider`` takes ``_lock``, so bootstrapping under ``_lock`` would
+deadlock. Every read path calls the bootstrap first, as a separate step.
 """
 
 from __future__ import annotations
@@ -70,6 +75,7 @@ def _ensure_builtin_providers() -> None:
     back to host path resolution, silently and only under concurrency.
     """
     global _builtin_bootstrap_done
+    assert not _lock.locked(), "bootstrap must run before _lock is taken"
     if _builtin_bootstrap_done:
         return
     with _bootstrap_lock:
@@ -253,9 +259,10 @@ def restore_registration(
 
 
 def _reset_for_tests() -> None:
-    """Clear all registrations. Test hook — mirrors sibling registries."""
+    """Clear all registrations. Test hook, mirrors sibling registries."""
     global _generation, _builtin_bootstrap_done
-    _builtin_bootstrap_done = False
+    with _bootstrap_lock:
+        _builtin_bootstrap_done = False
     with _lock:
         _providers.clear()
         _scoped_providers.clear()

@@ -84,3 +84,33 @@ def test_terminal_creation_passes_apple_specific_config(monkeypatch):
     assert captured["container_config"]["apple_container_volumes"] == [
         "/host/data:/workspace/data:ro"
     ]
+
+
+def test_registered_container_providers_agree_with_approval_conditionality():
+    """tools.approval._should_skip_container_guards keeps its own hardcoded
+    ``{"docker", "apple_container"}`` set instead of reading a provider's
+    ``skip_container_guards`` (rewiring approval.py is out of scope). This is
+    the tripwire: derive "host-access-conditional" behaviorally (does
+    has_host_access flip the outcome for that name?) instead of re-hardcoding
+    approval.py's literal set here, so the test can't itself drift from the
+    source it is checking. Any registered provider approval.py treats as
+    conditional must declare skip_container_guards=False, matching that
+    guards apply once a host path is mounted -- an unconditional-skip
+    provider on that path would silently disagree with approval.py.
+    """
+    from agent.terminal_env_registry import list_providers
+    from tools.approval import _should_skip_container_guards
+
+    for provider in list_providers():
+        name = provider.name.strip().lower()
+        conditional = (
+            _should_skip_container_guards(name, has_host_access=False)
+            != _should_skip_container_guards(name, has_host_access=True)
+        )
+        if conditional:
+            assert provider.skip_container_guards is False, (
+                f"{name!r} is host-access-conditional in "
+                "tools.approval._should_skip_container_guards but its "
+                "provider declares skip_container_guards=True, an "
+                "unconditional skip that disagrees with approval.py."
+            )

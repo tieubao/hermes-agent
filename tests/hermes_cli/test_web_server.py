@@ -3030,6 +3030,39 @@ class TestNewEndpoints:
         assert response.status_code == 400
         assert "macOS 26" in response.json()["detail"]
 
+    def test_select_registry_backend_rejects_when_unavailable(self, monkeypatch):
+        """The unavailable-on-select guard applies to every backend, not just
+        apple_container (the check used to be gated behind a
+        ``backend == "apple_container"`` literal; a registry-registered
+        backend reporting ``unavailable`` must get the same 400)."""
+        from agent.terminal_env_provider import TerminalEnvironmentProvider
+        from agent import terminal_env_registry as reg
+
+        class _UnavailableProvider(TerminalEnvironmentProvider):
+            name = "fake_unavailable_backend"
+            display_name = "Fake Unavailable Backend"
+
+            def is_available(self):
+                return False
+
+            def probe(self):
+                return ("unavailable", "fake backend is unavailable in tests")
+
+            def create_environment(self, **kwargs):
+                raise NotImplementedError
+
+        provider = _UnavailableProvider()
+        reg.register_provider(provider)
+        try:
+            response = self.client.put(
+                "/api/tools/terminal/backend",
+                json={"backend": "fake_unavailable_backend"},
+            )
+            assert response.status_code == 400
+            assert "fake backend is unavailable in tests" in response.json()["detail"]
+        finally:
+            reg.restore_registration("fake_unavailable_backend", provider, None)
+
 
 
 
