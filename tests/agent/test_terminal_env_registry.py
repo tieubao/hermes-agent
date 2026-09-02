@@ -204,3 +204,50 @@ def test_registry_generation_bumps():
     reg.register_provider(_Provider())
     g1 = reg.registry_generation()
     assert g1 != g0
+
+
+def test_builtin_bootstrap_is_atomic_under_concurrency(monkeypatch):
+    """A second reader must not observe the registry mid-bootstrap.
+
+    The bootstrap flag guards a lazy import + registration. Flipping it before
+    registration finishes lets a concurrent reader skip the bootstrap and read
+    an empty registry, which classifies apple_container as a non-container
+    backend for that call -- host cwds stop being sanitized and file tools fall
+    back to host path resolution. Silent, and only under concurrency.
+    """
+    import threading
+
+    import tools.environments.apple_container_provider as acp
+
+    real_register = acp.register_builtin_providers
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_register():
+        entered.set()
+        release.wait(5)
+        real_register()
+
+    monkeypatch.setattr(acp, "register_builtin_providers", slow_register)
+
+    results = {}
+
+    def read(key):
+        results[key] = reg.get_provider("apple_container")
+
+    first = threading.Thread(target=read, args=("first",))
+    first.start()
+    assert entered.wait(5), "bootstrap never started"
+
+    # Second reader arrives while the first is still registering.
+    second = threading.Thread(target=read, args=("second",))
+    second.start()
+    release.set()
+    first.join(10)
+    second.join(10)
+
+    assert results["first"] is not None
+    assert results["second"] is not None, (
+        "second reader saw an empty registry mid-bootstrap: apple_container "
+        "would be misclassified as a non-container backend for that call"
+    )

@@ -49,6 +49,9 @@ _generation = 0
 _scoped_generations: Dict[str, int] = {}
 _lock = threading.Lock()
 _builtin_bootstrap_done = False
+#: Separate from ``_lock``: registration takes ``_lock``, so bootstrapping
+#: under it would deadlock. Every caller runs this BEFORE taking ``_lock``.
+_bootstrap_lock = threading.Lock()
 
 
 def _ensure_builtin_providers() -> None:
@@ -59,19 +62,30 @@ def _ensure_builtin_providers() -> None:
     its module eagerly, and a bare ``run_agent`` process never runs plugin
     discovery, so every read path bootstraps it here. Runs once; called
     before the lock, never while holding it.
+
+    The flag flips only once registration has actually finished. Setting it
+    first lets a second thread skip the bootstrap and read the registry while
+    it is still empty, which classifies apple_container as a non-container
+    backend for that call: host cwds stop being sanitized and file tools fall
+    back to host path resolution, silently and only under concurrency.
     """
     global _builtin_bootstrap_done
     if _builtin_bootstrap_done:
         return
-    _builtin_bootstrap_done = True
-    try:
-        from tools.environments.apple_container_provider import (
-            register_builtin_providers,
-        )
+    with _bootstrap_lock:
+        if _builtin_bootstrap_done:
+            return
+        try:
+            from tools.environments.apple_container_provider import (
+                register_builtin_providers,
+            )
 
-        register_builtin_providers()
-    except Exception:
-        logger.debug("Built-in terminal provider bootstrap failed", exc_info=True)
+            register_builtin_providers()
+        except Exception:
+            logger.debug("Built-in terminal provider bootstrap failed", exc_info=True)
+        # Set even on failure: a broken import must not be retried on every
+        # registry read.
+        _builtin_bootstrap_done = True
 
 
 def register_provider(
