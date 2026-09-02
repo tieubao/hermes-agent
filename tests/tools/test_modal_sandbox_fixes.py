@@ -367,6 +367,39 @@ class TestDockerHostBindApproval:
         assert _tt_mod._docker_has_host_access(
             {"env_type": "modal", "docker_volumes": ["/tmp:/x"]}) is False
 
+    def test_docker_host_access_via_extra_args_bind_mount(self):
+        """A --mount/-v bind mount smuggled through docker_extra_args must
+        count as host access too, or it silently bypasses the approval guard
+        the structured docker_volumes list already enforces."""
+        # --mount type=bind,source=...,target=... -> host access.
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": [
+                 "--mount", "type=bind,source=/etc,target=/hostetc"]}) is True
+        # -v HOST:CONTAINER -> host access.
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": ["-v", "/etc:/hostetc"]}) is True
+        # --volume HOST:CONTAINER -> host access.
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": ["--volume", "/etc:/hostetc"]}) is True
+        # Inline --mount=type=bind,... form -> host access.
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": [
+                 "--mount=type=bind,source=/etc,target=/hostetc"]}) is True
+
+    def test_docker_extra_args_without_bind_mount_unchanged(self):
+        """extra_args that carry no bind mount (e.g. --network none) must not
+        flip host-access detection."""
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": ["--network", "none"]}) is False
+        assert _tt_mod._docker_has_host_access(
+            {"env_type": "docker", "docker_volumes": [],
+             "docker_extra_args": []}) is False
+
     def test_should_skip_container_guards(self):
         """Docker skips only when isolated; other sandboxes always skip."""
         import tools.approval as A

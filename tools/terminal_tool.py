@@ -372,13 +372,43 @@ def _docker_volume_uses_host_path(volume_spec: str) -> bool:
     )
 
 
+def _extra_args_have_host_mount(extra_args: Any) -> bool:
+    """Return True when raw ``docker_extra_args`` flags smuggle a host bind mount.
+
+    ``docker_extra_args`` accepts raw ``docker run`` flags (network
+    isolation, tmpfs shadows, ...). ``--mount type=bind,source=<host>,...``,
+    ``-v HOST:CONTAINER`` and ``--volume HOST:CONTAINER`` bind a host path
+    into the container the same way the structured ``docker_volumes`` list
+    does, so they must count as host access too -- otherwise a config that
+    smuggles its mount through extra_args instead of the structured list
+    silently skips the dangerous-command approval guard.
+    """
+    if not isinstance(extra_args, list):
+        return False
+    tokens = [arg for arg in extra_args if isinstance(arg, str)]
+    for index, token in enumerate(tokens):
+        flag, has_inline, inline_value = token.partition("=")
+        if flag == "--mount":
+            value = inline_value if has_inline else (
+                tokens[index + 1] if index + 1 < len(tokens) else ""
+            )
+            if "type=bind" in value or "source=" in value:
+                return True
+        elif flag in ("-v", "--volume"):
+            return True
+    return False
+
+
 def _docker_has_host_access(config: Dict[str, Any]) -> bool:
     """Return True when a Docker sandbox exposes host paths through bind mounts."""
     if config.get("env_type") != "docker":
         return False
     if config.get("host_cwd") and config.get("docker_mount_cwd_to_workspace"):
         return True
-    return any(_docker_volume_uses_host_path(vol) for vol in config.get("docker_volumes", []))
+    return (
+        any(_docker_volume_uses_host_path(vol) for vol in config.get("docker_volumes", []))
+        or _extra_args_have_host_mount(config.get("docker_extra_args", []))
+    )
 
 
 def _check_all_guards(command: str, env_type: str,
