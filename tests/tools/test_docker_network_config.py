@@ -19,10 +19,16 @@ def test_terminal_env_config_reads_docker_network_toggle(monkeypatch):
 
 
 def test_sibling_container_config_sites_carry_docker_network():
-    """Every container_config dict that carries docker_run_as_host_user must
-    also carry docker_network — otherwise that code path silently falls back
-    to networked containers while the terminal path honors the lockdown
-    (the probe/exec asymmetry reported on issue #46358).
+    """No spawn path may build a container_config that omits docker_network.
+
+    Otherwise that path silently falls back to networked containers while the
+    terminal path honors the lockdown (the probe/exec asymmetry on issue
+    #46358).
+
+    A module satisfies this either by building a compliant dict inline, or by
+    delegating to terminal_tool._container_config_from_config. Delegation is
+    the stronger form -- one dict instead of three copies that can drift -- so
+    the check accepts it rather than forcing every module to keep a literal.
     """
     import ast
     import inspect
@@ -31,7 +37,8 @@ def test_sibling_container_config_sites_carry_docker_network():
     import tools.file_tools as file_tools
 
     for module in (terminal_tool, file_tools, code_execution_tool):
-        tree = ast.parse(inspect.getsource(module))
+        source = inspect.getsource(module)
+        tree = ast.parse(source)
         sites = 0
         for node in ast.walk(tree):
             if not isinstance(node, ast.Dict):
@@ -44,7 +51,21 @@ def test_sibling_container_config_sites_carry_docker_network():
                     f"docker_run_as_host_user but without docker_network "
                     f"(line {node.lineno})"
                 )
-        assert sites >= 1, f"expected at least one container_config site in {module.__name__}"
+        delegates = "_container_config_from_config" in source
+        assert sites >= 1 or delegates, (
+            f"{module.__name__} neither builds a container_config nor "
+            f"delegates to _container_config_from_config"
+        )
+
+
+def test_shared_container_config_helper_carries_both_keys():
+    """The helper the sibling paths delegate to is now the single place the
+    #46358 invariant lives, so pin it directly."""
+    built = terminal_tool._container_config_from_config({})
+
+    assert "docker_network" in built
+    assert "docker_run_as_host_user" in built
+    assert built["docker_network"] is True
 
 
 def _reuse_guard_harness(monkeypatch, *, existing_mode: str, network: bool):
