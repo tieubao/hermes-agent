@@ -874,7 +874,6 @@ def _get_or_create_env(task_id: str):
         _get_env_config, _last_activity, _start_cleanup_thread,
         _creation_locks, _creation_locks_lock, _task_env_overrides,
         _resolve_container_task_id, _resolve_task_host_cwd,
-        _CONTAINER_BACKENDS,
     )
 
     effective_task_id = _resolve_container_task_id(task_id)

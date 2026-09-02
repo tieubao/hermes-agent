@@ -166,6 +166,9 @@ class TestFileOpsCwdSanitizedAtCallSite:
             "singularity_image": "docker://pytorch/pytorch:latest",
             "modal_image": "pytorch/pytorch:latest",
             "daytona_image": "pytorch/pytorch:latest",
+            "apple_container_image": "python:3.11-slim-bookworm",
+            "apple_container_volumes": [],
+            "apple_container_extra_args": [],
             "cwd": config_cwd,
             "host_cwd": None,
             "timeout": 180,
@@ -239,3 +242,23 @@ class TestFileOpsCwdSanitizedAtCallSite:
         cwd = self._run_and_capture_cwd(
             monkeypatch, "/Users/me/workspace", env_type="modal")
         assert cwd == "/workspace"
+
+
+    def test_apple_container_host_override_does_not_reach_container(self, monkeypatch):
+        """apple_container is registry-classified, so this guard must ask
+        _is_container_backend() and not the built-in frozenset. Reading the
+        frozenset silently skips the guard and search_files comes back empty
+        inside the VM (#54447 for the Apple Container lane)."""
+        cwd = self._run_and_capture_cwd(
+            monkeypatch, "/Users/me/workspace", env_type="apple_container"
+        )
+        assert cwd == "/workspace", (
+            f"Host-path cwd override leaked to the container builder: {cwd!r}. "
+            "It must be sanitized back to config['cwd']."
+        )
+
+    def test_apple_container_valid_override_is_preserved(self, monkeypatch):
+        cwd = self._run_and_capture_cwd(
+            monkeypatch, "/workspace/task42", env_type="apple_container"
+        )
+        assert cwd == "/workspace/task42"
