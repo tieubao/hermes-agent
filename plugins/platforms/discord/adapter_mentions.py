@@ -13,7 +13,7 @@ def resolve_outbound_mentions(content: str, guild: Any) -> str:
     """Rewrite readable ``@Name`` references in ``content`` into real user mentions.
 
     Matching is against the guild's cached members (name / display_name / global_name,
-    case-insensitive), longest name first so ``@neko bot`` wins over a member named ``neko``.
+    case-insensitive), longest name first so ``@support bot`` wins over a member named ``support``.
     Already-formed ``<@id>`` tokens, emails (``me@host``) and unknown names are left untouched;
     ``@everyone`` and roles stay governed by ``allowed_mentions``. Returns ``content`` unchanged
     without a guild (DMs) or without an ``@``.
