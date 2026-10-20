@@ -3335,7 +3335,7 @@ class BasePlatformAdapter(ABC):
                 continue
             raw = match.group(0)
             expanded = os.path.expanduser(raw)
-            if os.path.isfile(expanded):
+            if os.path.isfile(expanded) or (_docker_env_active() and _translate_docker_container_media_path(Path(expanded), quiet=True)):
                 unique.setdefault(expanded, raw)
             else:
                 # Most common reason a promised file never arrives — log the gap.
