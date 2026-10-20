@@ -503,7 +503,7 @@ If a thread's parent channel is in this list, messages in that thread are also i
 
 #### `discord.ignored_thread_name_prefixes`
 
-**Type:** list — **Default:** unset
+**Type:** list, **Default:** unset
 
 Threads whose name starts with one of these prefixes are ignored like an ignored channel: the bot does not respond, and no thread history is fetched. Use it for threads that another integration creates on the fly with a recognisable name. Entries are matched literally and case-sensitively, blank entries are skipped, and the key is a list (not a comma-separated string) so a prefix may contain a comma. There is no environment variable.
 
