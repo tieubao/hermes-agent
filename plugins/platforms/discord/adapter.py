@@ -402,39 +402,7 @@ async def _wait_for_ready_or_bot_exit(
         await cancel_task(ready_task)
 
 
-def _needs_server_members_intent(
-    allowed_user_ids: set[str] | list[str] | None, allowed_role_ids: set[str] | list[str] | None,
-) -> bool:
-    """True when Server Members intent is needed: username allowlist entries (not IDs / ``*``)
-    or role allowlists needing member lookups. Message Content is always requested."""
-    entries = allowed_user_ids or ()
-    if any(entry != "*" and not str(entry).isdigit() for entry in entries):
-        return True
-    return bool(allowed_role_ids)
-
-
-def _format_privileged_intents_guidance(*, needs_members: bool) -> str:
-    """Actionable fix text when Discord rejects privileged Gateway Intents."""
-    lines = [
-        "Discord rejected the connection because privileged Gateway Intents "
-        "are not enabled for this bot in the Developer Portal.",
-        "Hermes is requesting:",
-        "  - Message Content Intent (required to read message text)",
-    ]
-    if needs_members:
-        lines.append(
-            "  - Server Members Intent (required for username allowlists "
-            "and/or DISCORD_ALLOWED_ROLES)"
-        )
-    lines.extend(
-        [
-            "Fix: https://discord.com/developers/applications → your application "
-            "→ Bot → Privileged Gateway Intents → enable the intent(s) listed "
-            "above → Save Changes, then restart the gateway.",
-            "Docs: https://hermes-agent.nousresearch.com/docs/user-guide/messaging/discord",
-        ]
-    )
-    return "\n".join(lines)
+from plugins.platforms.discord.adapter_intents import _format_privileged_intents_guidance, _needs_server_members_intent
 
 
 def _load_opus_codec() -> None:
@@ -1212,6 +1180,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 from plugins.platforms.discord.adapter_media import DiscordMediaMixin
+from plugins.platforms.discord.adapter_mentions import DiscordOutboundMentionsMixin, outbound_mentions_yaml
 from plugins.platforms.discord.adapter_authorization import DiscordAuthorizationMixin
 from plugins.platforms.discord.adapter_slash_auth import DiscordSlashAuthMixin
 from plugins.platforms.discord.adapter_thread_titles import DiscordThreadTitlesMixin, SemanticThreadRenames
@@ -1219,7 +1188,7 @@ from plugins.platforms.discord.adapter_voice_info import DiscordVoiceInfoMixin
 
 
 class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThreadTitlesMixin, DiscordVoiceInfoMixin,
-                     DiscordSlashAuthMixin, BasePlatformAdapter):
+                     DiscordSlashAuthMixin, DiscordOutboundMentionsMixin, BasePlatformAdapter):
     """Discord bot adapter: guild/DM messages, threads, slash commands, button approvals, reactions."""
 
     MAX_MESSAGE_LENGTH = 2000
@@ -1469,7 +1438,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
             intents.guild_messages = True
             intents.members = _needs_server_members_intent(
                 self._allowed_user_ids, self._allowed_role_ids,
-            )
+            ) or self._resolves_outbound_mentions()
             intents.voice_states = True
             # Resolve proxy (DISCORD_PROXY > generic env vars > macOS system proxy)
             from gateway.platforms.base import resolve_proxy_url, proxy_kwargs_for_bot
@@ -1663,7 +1632,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                 needs_members=_needs_server_members_intent(
                     getattr(self, "_allowed_user_ids", None),
                     getattr(self, "_allowed_role_ids", None),
-                )
+                ) or self._resolves_outbound_mentions()
             )
             return ("discord_intents_required", guidance, False)
         return ("discord_connect_error", f"Discord startup failed: {error}", True)
@@ -3278,6 +3247,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                 channel = await self._resolve_channel(chat_id)
                 if not channel:
                     return SendResult(success=False, error=f"Channel {chat_id} not found")
+            content = self._resolve_outbound_mentions(content, channel)
             # Forum channels reject channel.send() — create a thread post instead.
             if self._is_forum_parent(channel):
                 result = await self._send_to_forum(channel, content)
@@ -3440,6 +3410,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
         try:
             channel = await self._resolve_channel(chat_id)
             msg = channel.get_partial_message(int(message_id))
+            content = self._resolve_outbound_mentions(content, channel) if finalize else content
             formatted = self.format_message(content)
             _preview_key = (str(chat_id), str(message_id))
             _saturated_preview = False
@@ -7281,7 +7252,7 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
     def _csv(value) -> str:
         return ",".join(str(v) for v in value) if isinstance(value, list) else str(value)
 
-    seeded_extra = {}
+    seeded_extra = outbound_mentions_yaml(discord_cfg)
     for key, env_key in _YAML_BOOL_ENV_KEYS:
         if key in discord_cfg:
             seeded_extra[key] = discord_cfg[key]  # original type: the shared-key loop seeds bools as bools

@@ -998,6 +998,20 @@ DISCORD_ALLOW_MENTION_REPLIED_USER=true
 Leave `everyone` and `roles` at `false` unless you know exactly why you need them. It is very easy for an LLM to produce the string `@everyone` inside a normal-looking response; without this protection, that would notify every member of your server.
 :::
 
+### Mentioning people by name
+
+Models write a friendly `@Display Name` rather than the raw `<@id>` Discord needs, so a bot's attempt to ping someone arrives as plain text. Set `discord.resolve_outbound_mentions: true` (default `false`) to rewrite `@Name` into a real user mention on the way out:
+
+```yaml
+discord:
+  resolve_outbound_mentions: true
+```
+
+- Names are matched against the guild's members (username, display name or global name, case-insensitive). The longest name wins, so `@Support Bot` resolves before a member called `Support`.
+- It applies to channel and thread replies, forum starter posts, and the final edit of a streamed reply. A partial streamed edit is left alone, because a half-typed name could match the wrong member.
+- Email addresses, existing `<@id>` mentions and names that match nobody are left untouched. `@everyone` and role pings stay governed by `discord.allow_mentions`.
+- The member list needs the **Server Members Intent** (Step 3). Hermes requests it when this setting is on.
+
 For more information on securing your Hermes Agent deployment, see the [Security Guide](../security.md).
 
 
