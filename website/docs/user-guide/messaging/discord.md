@@ -376,6 +376,7 @@ discord:
   free_response_auto_thread: false # If true, free_response_channels also auto-thread (default: inline)
   reactions: true                 # Add emoji reactions during processing
   ignored_channels: []            # Channel IDs where bot never responds
+  ignored_thread_name_prefixes: []  # Threads whose name starts with one of these are ignored
   no_thread_channels: []          # Channel IDs where bot responds without threading
   history_backfill: true          # Prepend recent channel scrollback on mention (default: true)
   history_backfill_limit: 50      # Max messages to scan backwards (default: 50)
@@ -499,6 +500,19 @@ discord:
 ```
 
 If a thread's parent channel is in this list, messages in that thread are also ignored.
+
+#### `discord.ignored_thread_name_prefixes`
+
+**Type:** list — **Default:** unset
+
+Threads whose name starts with one of these prefixes are ignored like an ignored channel: the bot does not respond, and no thread history is fetched. Use it for threads that another integration creates on the fly with a recognisable name. Entries are matched literally and case-sensitively, blank entries are skipped, and the key is a list (not a comma-separated string) so a prefix may contain a comma. There is no environment variable.
+
+```yaml
+discord:
+  ignored_thread_name_prefixes:
+    - "[draft] "
+    - "tmp-"
+```
 
 #### `discord.no_thread_channels`
 

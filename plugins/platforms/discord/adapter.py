@@ -1201,7 +1201,8 @@ class VoiceReceiver:
 
 
 from plugins.platforms.discord.adapter_config_readers import (
-    _DISCORD_PROMPT_TIMEOUT_DEFAULT, _DISCORD_PROMPT_TIMEOUT_MIN, _read_discord_prompt_timeout, _read_dm_role_auth_guild)
+    _DISCORD_PROMPT_TIMEOUT_DEFAULT, _DISCORD_PROMPT_TIMEOUT_MIN, _read_discord_prompt_timeout, _read_dm_role_auth_guild,
+    channel_ignored, gate_csv_set, seed_thread_name_prefixes)
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -5001,14 +5002,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
             return extra.get(extra_key)
         return None
 
-    @staticmethod
-    def _gate_csv_set(raw) -> set:
-        if raw is None:
-            return set()
-        raw = _decode_json_list_literal(raw)
-        if isinstance(raw, list):
-            return {str(part).strip() for part in raw if str(part).strip()}
-        return {part.strip() for part in str(raw).split(",") if part.strip()}
+    _gate_csv_set = staticmethod(gate_csv_set)
 
     def _get_allowed_channels(self) -> set:
         """This adapter's DISCORD_ALLOWED_CHANNELS gate (per-profile)."""
@@ -6093,6 +6087,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
         #   discord.require_mention: Require @mention in server channels (default: true)
         #   discord.free_response_channels: Channel IDs where bot responds without mention
         #   discord.ignored_channels: Channel IDs where bot NEVER responds (even when mentioned)
+        #   discord.ignored_thread_name_prefixes: Threads whose name starts with one of these are dropped
         #   discord.allowed_channels: If set, bot ONLY responds in these channels (whitelist)
         #   discord.no_thread_channels: Channel IDs where bot responds directly without creating thread
         #   discord.auto_thread: Auto-create thread on @mention in channels (default: true)
@@ -6135,7 +6130,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                     logger.debug("[%s] Ignoring message in non-allowed channel: %s", self.name, channel_keys)
                     return False
             ignored_channels = self._get_ignored_channels()
-            if "*" in ignored_channels or (channel_keys & ignored_channels):
+            if channel_ignored(ignored_channels, channel_keys, self.config.extra, message.channel, is_thread):
                 logger.debug("[%s] Ignoring message in ignored channel: %s", self.name, channel_keys)
                 return False
             free_channels = self._discord_free_response_channels()
@@ -7327,6 +7322,7 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
     if isinstance(backfill_cfg, dict):
         seeded_extra["missed_message_backfill"] = dict(backfill_cfg)
     _gate("ignored_channels", "DISCORD_IGNORED_CHANNELS", from_platform_extra=False)
+    seed_thread_name_prefixes(seeded_extra, discord_cfg)
     _gate("allowed_channels", "DISCORD_ALLOWED_CHANNELS", from_platform_extra=False)
     _gate("no_thread_channels", "DISCORD_NO_THREAD_CHANNELS", from_platform_extra=False)
     # history_backfill: recover mention-gated channel messages between bot turns.
