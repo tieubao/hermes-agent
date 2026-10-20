@@ -1213,6 +1213,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 from plugins.platforms.discord.adapter_media import DiscordMediaMixin
 from plugins.platforms.discord.adapter_authorization import DiscordAuthorizationMixin
+from plugins.platforms.discord.adapter_bot_gate import bot_author_in_scope, seed_bot_gate_extra
 from plugins.platforms.discord.adapter_slash_auth import DiscordSlashAuthMixin
 from plugins.platforms.discord.adapter_thread_titles import DiscordThreadTitlesMixin, SemanticThreadRenames
 from plugins.platforms.discord.adapter_voice_info import DiscordVoiceInfoMixin
@@ -1684,7 +1685,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
         if getattr(message.author, "bot", False):
             allow_bots = self._get_allow_bots()
             bot_tag_continuation = self._is_bot_tag_debounce_continuation(message)
-            if allow_bots == "none":
+            if allow_bots == "none" or not bot_author_in_scope(self, message.author.id, message.channel):
                 return False, False
             if (
                 allow_bots == "mentions"
@@ -5251,7 +5252,8 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                     return None
                 # DISCORD_ALLOW_BOTS: for history, "mentions" counts as "all" (context, not response).
                 is_bot_author = getattr(msg.author, "bot", False)
-                if (is_bot_author and msg.author != self._client.user and not include_other_bots):
+                if (is_bot_author and msg.author != self._client.user
+                        and not (include_other_bots and bot_author_in_scope(self, msg.author.id, channel))):
                     return None
                 if not content and msg.attachments:
                     content = "(attachment)"
@@ -7307,6 +7309,7 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
     _gate("allowed_roles", "DISCORD_ALLOWED_ROLES", from_platform_extra=True)
     _gate("allow_all_users", "DISCORD_ALLOW_ALL_USERS", from_platform_extra=True, lower=True)
     _gate("allow_bots", "DISCORD_ALLOW_BOTS", from_platform_extra=True, lower=True)
+    seeded_extra.update(seed_bot_gate_extra(discord_cfg, platform_extra_cfg))
     approval_mentions_cfg = (
         discord_cfg["approval_mentions"] if "approval_mentions" in discord_cfg
         else platform_extra_cfg.get("approval_mentions")

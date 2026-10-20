@@ -350,6 +350,22 @@ The admission window lasts `max(HERMES_DISCORD_TEXT_BATCH_DELAY_SECONDS, HERMES_
 
 This is a short-burst heuristic, not guaranteed multipart delivery. A delayed chunk outside the window needs its own mention under the default policy. Unrelated messages from the same bot and channel inside the window can also be admitted. The exception is not restricted to text: attachments and commands may pass admission, but only text enters this batcher; other message types follow their normal handling. Existing channel restrictions and `DISCORD_ALLOW_BOTS=none` still apply. History/backfill behavior is unchanged. The gateway's bot loop guard remains as a backstop: after 20 bot-authored messages in one channel inside 5 minutes, further bot messages there are dropped for 10 minutes (tunable under `gateway.bot_loop_guard` in `config.yaml`; human messages are never counted).
 
+#### Limiting which bots are heard
+
+With `allow_bots` on, any bot that mentions Hermes is admitted in every channel it can see. Two optional `config.yaml` keys (under `discord:` or `platforms.discord.extra`) narrow that for bot authors only. Human authors are never affected.
+
+```yaml
+discord:
+  allow_bots: mentions
+  allowed_bot_ids: ["111111111111111111"]    # only this bot user ID is heard
+  bot_channels: ["222222222222222222"]       # only in this channel, or threads under it
+```
+
+- `allowed_bot_ids`: when non-empty, the bot author's user ID must be listed.
+- `bot_channels`: when non-empty, the message must be in a listed channel, or in a thread whose parent channel is listed.
+- Both apply to message admission and to the scrollback Hermes reads, so an unlisted bot's text never reaches the model as history either.
+- Unset (the default) keeps today's behaviour. These are config keys only; there is no environment variable.
+
 #### Compatibility with trusted relays
 
 The inline-mention requirement now defaults to **true** (previously false), including when `DISCORD_ALLOW_BOTS=all`. If an existing relay intentionally relies on reply pings or unmentioned bot messages, retain the old admission behavior explicitly:
